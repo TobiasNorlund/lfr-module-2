@@ -2,7 +2,7 @@
 set -e
 
 # Docker image name for this project
-export DOCKER_IMAGE_NAME="tobias/default"
+export DOCKER_IMAGE_NAME="tobias/lfr-module-2"
 
 # Path to where in the docker container the project root will be mounted
 export DOCKER_WORKSPACE_PATH="/workspace"
@@ -54,6 +54,7 @@ docker stop $CONTAINER_NAME 2> /dev/null || true
 
 set -x
 docker build --rm --build-arg DOCKER_WORKSPACE_PATH -t $DOCKER_IMAGE_NAME $PROJECT_ROOT
+xhost +
 docker run --rm -it \
   --name $CONTAINER_NAME \
   -v $PROJECT_ROOT:$DOCKER_WORKSPACE_PATH \
@@ -63,4 +64,5 @@ docker run --rm -it \
   $JUPYTER_PORT \
   $TENSORBOARD_PORT \
   $DETACH \
+  -e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix --net=host --ipc=host \
   $DOCKER_IMAGE_NAME bash
