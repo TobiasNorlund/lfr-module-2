@@ -1,3 +1,4 @@
 {
-    "terminal.integrated.shell.linux": "/bin/bash"
+    "terminal.integrated.shell.linux": "/bin/bash",
+    "python.pythonPath": "/usr/local/envs/WASP_rprl_mdl2/bin/python"
 }

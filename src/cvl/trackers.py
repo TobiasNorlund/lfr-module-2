@@ -1,6 +1,83 @@
 import numpy as np
 from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
+import cv2
 from .image_io import crop_patch
+
+
+class MOSSETracker:
+
+    def __init__(self, std=20, learning_rate=0.1):
+        self.learning_rate = learning_rate
+        self.width = None
+        self.height = None
+        self.std = std
+        self.region = None
+        self.A = None
+        self.B = None
+
+    @staticmethod
+    def normalize(image):
+        normalized_image = image / 255
+        normalized_image -= np.mean(normalized_image)
+        normalized_image /= np.std(normalized_image)
+        return normalized_image
+
+    @staticmethod
+    def get_fourier_transformed_gaussian(height, width, std, mean_x, mean_y):
+        v, u = np.meshgrid(range(width), range(height))
+        gaussian_ft = np.exp( \
+            -2 * np.pi**2 * std**2 * (u**2 + v**2) / (width*height) \
+            -2j*np.pi*(mean_y*u/height + mean_x*v/width))
+        return gaussian_ft
+
+    def start(self, image, region):
+        """
+        Construct initial model (=filter) in fourier domain using provided region in image
+        """
+        assert len(image.shape) == 2, "Only grayscale images supported atm"
+
+        # Where the gaussian should be centered
+        self.region = region
+        mean_x = self.region.xpos + self.region.width // 2
+        mean_y = self.region.ypos + self.region.height // 2
+
+        C = MOSSETracker.get_fourier_transformed_gaussian(height=image.shape[0], width=image.shape[1], std=self.std,
+                                                          mean_x=mean_x, mean_y=mean_y)
+        P = fft2(MOSSETracker.normalize(image))
+
+        self.A = np.conjugate(C) * P
+        self.B = np.conjugate(P) * P
+        self.M = self.A / self.B
+
+    def detect(self, image):
+        """
+        Find the object's new position in image, using current model M
+        """
+        assert len(image.shape) == 2, "Only grayscale images supported atm"
+
+        P = fft2(MOSSETracker.normalize(image))
+        response = ifft2( np.conjugate(self.M) * P )
+
+        r, c = np.unravel_index(np.argmax(response), response.shape)
+
+        self.region.xpos = c - self.region.width // 2
+        self.region.ypos = r - self.region.height // 2
+
+        return response
+
+    def update(self, image):
+        """
+        Re-fit model M using new object position found in self.region (from detection step)
+        """
+        mean_x = self.region.xpos + self.region.width // 2
+        mean_y = self.region.ypos + self.region.height // 2
+        C = MOSSETracker.get_fourier_transformed_gaussian(height=image.shape[0], width=image.shape[1], std=self.std,
+                                                          mean_x=mean_x, mean_y=mean_y)
+        P = fft2(MOSSETracker.normalize(image))
+
+        self.A = self.A * (1-self.learning_rate) + np.conjugate(C) * P * self.learning_rate
+        self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
+        self.M = self.A / self.B
 
 
 class NCCTracker:

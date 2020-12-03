@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from cvl.dataset import OnlineTrackingBenchmark
-from cvl.trackers import NCCTracker
+from cvl.trackers import NCCTracker, MOSSETracker
 
 dataset_path = "../data/Mini-OTB"
 
@@ -21,7 +21,9 @@ if __name__ == "__main__":
     if SHOW_TRACKING:
         cv2.namedWindow("tracker")
 
-    tracker = NCCTracker()
+    #tracker = NCCTracker()
+    tracker = MOSSETracker(std=20, learning_rate=0.5)
+    resp = 0.0
 
     for frame_idx, frame in enumerate(a_seq):
         print(f"{frame_idx} / {len(a_seq)}")
@@ -36,10 +38,9 @@ if __name__ == "__main__":
             if bbox.height % 2 == 0:
                 bbox.height += 1
 
-            current_position = bbox
             tracker.start(image, bbox)
         else:
-            tracker.detect(image)
+            resp = tracker.detect(image)
             tracker.update(image)
 
         if SHOW_TRACKING:
@@ -49,4 +50,5 @@ if __name__ == "__main__":
             image_color = cv2.cvtColor(image_color, cv2.COLOR_RGB2BGR)
             cv2.rectangle(image_color, pt0, pt1, color=(0, 255, 0), thickness=3)
             cv2.imshow("tracker", image_color)
+            #cv2.imshow("tracker", (image_color.mean(axis=2) + np.real(resp) * 1e6) / 255)
             cv2.waitKey(0)
