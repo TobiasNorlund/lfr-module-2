@@ -1,7 +1,17 @@
 import numpy as np
 from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
+from scipy.stats import multivariate_normal
 import cv2
 from .image_io import crop_patch
+
+def window_func_2d(height, width):
+    win_col = np.hanning(width)
+    win_row = np.hanning(height)
+    mask_col, mask_row = np.meshgrid(win_col, win_row)
+
+    win = mask_col * mask_row
+
+    return win
 
 
 class MOSSETracker:
@@ -17,9 +27,10 @@ class MOSSETracker:
 
     @staticmethod
     def normalize(image):
-        normalized_image = image / 255
-        normalized_image -= np.mean(normalized_image)
-        normalized_image /= np.std(normalized_image)
+        normalized_image = np.log(1+image)
+        normalized_image = (normalized_image - np.mean(normalized_image)) / (np.std(normalized_image) + 1e-5)
+        window = window_func_2d(image.shape[0], image.shape[1])
+        normalized_image = normalized_image * window
         return normalized_image
 
     @staticmethod
@@ -30,20 +41,29 @@ class MOSSETracker:
             -2j*np.pi*(mean_y*u/height + mean_x*v/width))
         return gaussian_ft
 
+    @staticmethod
+    def get_fft2_gaussian(height, width, std, mean_x, mean_y):
+        xy = np.mgrid[0:height, 0:width].reshape(2,-1).T
+        gaussian = multivariate_normal(mean=np.array([mean_y, mean_x]), cov=np.eye(2)*std**2).pdf(xy)
+        gaussian = np.array(gaussian).reshape(height, width)
+        return fft2(gaussian)
+
     def start(self, image, region):
         """
         Construct initial model (=filter) in fourier domain using provided region in image
         """
         assert len(image.shape) == 2, "Only grayscale images supported atm"
 
+        patch = crop_patch(image, region)
+
         # Where the gaussian should be centered
         self.region = region
-        mean_x = self.region.xpos + self.region.width // 2
-        mean_y = self.region.ypos + self.region.height // 2
+        mean_x = self.region.width // 2
+        mean_y = self.region.height // 2
 
-        C = MOSSETracker.get_fourier_transformed_gaussian(height=image.shape[0], width=image.shape[1], std=self.std,
-                                                          mean_x=mean_x, mean_y=mean_y)
-        P = fft2(MOSSETracker.normalize(image))
+        C = MOSSETracker.get_fft2_gaussian(height=region.height, width=region.width, std=self.std,
+                                           mean_x=mean_x, mean_y=mean_y)
+        P = fft2(MOSSETracker.normalize(patch))
 
         self.A = np.conjugate(C) * P
         self.B = np.conjugate(P) * P
@@ -55,13 +75,15 @@ class MOSSETracker:
         """
         assert len(image.shape) == 2, "Only grayscale images supported atm"
 
-        P = fft2(MOSSETracker.normalize(image))
+        patch = crop_patch(image, self.region)
+
+        P = fft2(MOSSETracker.normalize(patch))
         response = ifft2( np.conjugate(self.M) * P )
+        # response should be a slightly shifted gaussian
+        y, x = np.unravel_index(np.argmax(response), response.shape)
 
-        r, c = np.unravel_index(np.argmax(response), response.shape)
-
-        self.region.xpos = c - self.region.width // 2
-        self.region.ypos = r - self.region.height // 2
+        self.region.xpos += x - self.region.width // 2
+        self.region.ypos += y - self.region.height // 2
 
         return response
 
@@ -69,11 +91,15 @@ class MOSSETracker:
         """
         Re-fit model M using new object position found in self.region (from detection step)
         """
-        mean_x = self.region.xpos + self.region.width // 2
-        mean_y = self.region.ypos + self.region.height // 2
-        C = MOSSETracker.get_fourier_transformed_gaussian(height=image.shape[0], width=image.shape[1], std=self.std,
-                                                          mean_x=mean_x, mean_y=mean_y)
-        P = fft2(MOSSETracker.normalize(image))
+
+        patch = crop_patch(image, self.region)
+
+        mean_x = self.region.width // 2
+        mean_y = self.region.height // 2
+
+        C = MOSSETracker.get_fft2_gaussian(height=self.region.height, width=self.region.width, std=self.std,
+                                           mean_x=mean_x, mean_y=mean_y)
+        P = fft2(MOSSETracker.normalize(patch))
 
         self.A = self.A * (1-self.learning_rate) + np.conjugate(C) * P * self.learning_rate
         self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
