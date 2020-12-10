@@ -42,6 +42,17 @@ class MOSSETracker:
         return gaussian_ft
 
     @staticmethod
+    def gen_affine_transform(image, n_transforms=15, rot_sd=0.2):
+        transformed_images = []
+        for i in range(n_transforms):
+            alpha = np.random.normal(loc=0, scale=rot_sd)
+            M = np.float32([
+                [np.cos(alpha), -np.sin(alpha), 0],
+                [np.sin(alpha), np.cos(alpha), 0]])
+            transformed_images.append(cv2.warpAffine(image, M, image.shape))
+        return transformed_images
+
+    @staticmethod
     def get_fft2_gaussian(height, width, std, mean_x, mean_y):
         xy = np.mgrid[0:height, 0:width].reshape(2,-1).T
         gaussian = multivariate_normal(mean=np.array([mean_y, mean_x]), cov=np.eye(2)*std**2).pdf(xy)
@@ -54,8 +65,6 @@ class MOSSETracker:
         """
         assert len(image.shape) == 2, "Only grayscale images supported atm"
 
-        patch = crop_patch(image, region)
-
         # Where the gaussian should be centered
         self.region = region
         mean_x = self.region.width // 2
@@ -63,10 +72,19 @@ class MOSSETracker:
 
         C = MOSSETracker.get_fft2_gaussian(height=region.height, width=region.width, std=self.std,
                                            mean_x=mean_x, mean_y=mean_y)
-        P = fft2(MOSSETracker.normalize(patch))
 
+        patch = crop_patch(image, region)
+
+        P = fft2(MOSSETracker.normalize(patch))
         self.A = np.conjugate(C) * P
         self.B = np.conjugate(P) * P
+
+        aff_images = MOSSETracker.gen_affine_transform(patch, n_transforms=0)
+        for aff_patch in aff_images:
+            P = fft2(MOSSETracker.normalize(patch))
+            self.A += C * np.conjugate(P)
+            self.B += np.conjugate(P) * P
+
         self.M = self.A / self.B
 
     def detect(self, image):
@@ -82,8 +100,12 @@ class MOSSETracker:
         # response should be a slightly shifted gaussian
         y, x = np.unravel_index(np.argmax(response), response.shape)
 
-        self.region.xpos += x - self.region.width // 2
-        self.region.ypos += y - self.region.height // 2
+        delta_x = x - self.region.width // 2
+        delta_y = y - self.region.height // 2
+        print(f"delta_x: {delta_x}\tdelta_y:{delta_y}")
+
+        self.region.xpos += delta_x
+        self.region.ypos += delta_y
 
         return response
 
@@ -93,18 +115,20 @@ class MOSSETracker:
         """
 
         patch = crop_patch(image, self.region)
+        normalized_patch = MOSSETracker.normalize(patch)
 
         mean_x = self.region.width // 2
         mean_y = self.region.height // 2
 
         C = MOSSETracker.get_fft2_gaussian(height=self.region.height, width=self.region.width, std=self.std,
                                            mean_x=mean_x, mean_y=mean_y)
-        P = fft2(MOSSETracker.normalize(patch))
+        P = fft2(normalized_patch)
 
         self.A = self.A * (1-self.learning_rate) + np.conjugate(C) * P * self.learning_rate
         self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
         self.M = self.A / self.B
 
+        return normalized_patch
 
 class NCCTracker:
 
