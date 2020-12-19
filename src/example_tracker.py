@@ -6,6 +6,8 @@ import numpy as np
 
 from cvl.dataset import OnlineTrackingBenchmark
 from cvl.trackers import NCCTracker, MOSSETracker
+#from ncc import NCCTracker
+#from mosse import MOSSETrackerGrayscale
 
 dataset_path = "../data/Mini-OTB"
 
@@ -23,8 +25,8 @@ if __name__ == "__main__":
     if SHOW_TRACKING:
         cv2.namedWindow("tracker")
 
-    #tracker = NCCTracker()
-    tracker = MOSSETracker(std=10, learning_rate=0.1)
+    tracker = NCCTracker()
+    #tracker = MOSSETracker(std=10, learning_rate=0.1)
     #resp = 0.0
     #norm_patch = np.array(0.0)
 
