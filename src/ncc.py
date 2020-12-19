@@ -62,8 +62,6 @@ class NCCTracker:
         r_offset = np.mod(r + self.region_center[0], self.region.height) - self.region_center[0]
         c_offset = np.mod(c + self.region_center[1], self.region.width) - self.region_center[1]
 
-        # print(f"r_offset: {r_offset}\tc_offset: {c_offset}")
-
         self.region.xpos += c_offset
         self.region.ypos += r_offset
 
