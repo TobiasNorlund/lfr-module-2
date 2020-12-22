@@ -11,6 +11,24 @@
             "program": "${file}",
             "cwd": "${workspaceFolder}/src",
             "console": "integratedTerminal"
-        }
+        },
+        {
+            "name": "Evaluate NCC",
+            "type": "python",
+            "request": "launch",
+            "program": "evaluate.py",
+            "args": ["--tracker", "NCC"],
+            "cwd": "${workspaceFolder}/src",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run NCC",
+            "type": "python",
+            "request": "launch",
+            "program": "run_tracker_interactive.py",
+            "args": ["--tracker", "NCC", "--seq-idx", "20"],
+            "cwd": "${workspaceFolder}/src",
+            "console": "integratedTerminal"
+        },
     ]
 }

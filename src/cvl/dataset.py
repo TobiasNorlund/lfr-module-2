@@ -29,27 +29,20 @@ class BoundingBox(object):
     def shape(self):
         return self.height, self.width
 
-    def rescale(self, scale_factor, round_coordinates=False):
-        nw = self.width * scale_factor
-        nh = self.height * scale_factor
+    def rescale(self, scale_factor):
+        nx = self.xpos - int(self.width * (scale_factor - 1) / 2)
+        nw = int(self.width * scale_factor)
+        ny = self.ypos - int(self.height * (scale_factor - 1) / 2)
+        nh = int(self.height * scale_factor)
 
-        cx, cy = self.get_center()
+        return BoundingBox('tl-size', nx, ny, nw, nh)
 
-        if round_coordinates:
-            nx = math.floor(cx - nw/2)
-            ny = math.floor(cy - nh/2)
-        else:
-            nx = cx - nw/2
-            ny = cy - nh/2
-
-        if round_coordinates:
-            return BoundingBox('tl-size', nx, ny, math.floor(nw), math.floor(nh))
-        else:
-            return BoundingBox('tl-size', nx, ny, nw, nh)
+    def clone(self):
+        return BoundingBox('tl-size', self.xpos, self.ypos, self.width, self.height)
 
     def get_center(self):
-        cx = self.xpos + self.width/2
-        cy = self.ypos + self.width/2
+        cx = int(self.xpos + self.width/2)
+        cy = int(self.ypos + self.width/2)
 
         return cx, cy
 
@@ -295,16 +288,16 @@ class OnlineTrackingBenchmark:
 
         return iou
 
-    def calculate_auc(self, sequence_idx, tracked_boxes):
+    def calculate_mean_iou(self, sequence_idx, tracked_boxes):
         seq_name = self.sequences[sequence_idx].sequence_name
         per_frame_iou = self.calculate_per_frame_iou(sequence_idx, tracked_boxes)
-        auc = np.cumsum(per_frame_iou)
-        return auc
+        avg_iou = np.mean(per_frame_iou)
+        return avg_iou
 
     def calculate_performance(self, per_sequence_performance):
-        per_seq_auc = []
+        per_seq_mean_iou = []
         for sequence_idx in per_sequence_performance:
             seq_tracker_output = per_sequence_performance[sequence_idx]
-            per_seq_auc.append(self.calculate_auc(sequence_idx, seq_tracker_output))
+            per_seq_mean_iou.append(self.calculate_mean_iou(sequence_idx, seq_tracker_output))
 
-        return per_seq_auc
+        return per_seq_mean_iou
