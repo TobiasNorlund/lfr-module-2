@@ -12,7 +12,7 @@ DATASET_PATH = "../data/Mini-OTB"
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(conflict_handler="resolve")
-    parser.add_argument("--seq-idx", type=int, default=0)
+    parser.add_argument("--seq-idx", type=int, default=4)
     parser.add_argument("--bbox-enlarge-factor", type=float, default=1.0)
     trackers.add_tracker_args(parser)
     args = parser.parse_args()
