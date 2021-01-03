@@ -108,7 +108,7 @@ class MOSSETrackerGrayscale:
 
         return self.region
 
-        def compute_response(self, image):
+    def compute_response(self, image):
         """
             Update docstring
         """

@@ -38,6 +38,8 @@ class MOSSEMultiChannel:
         self.descriptor = get_feature_descriptor(feature_descriptor)
         self.region = None
         self.region_center = None
+        self.mosse_trackers = []
+
 
     def start(self, image, region):
         """
@@ -52,11 +54,10 @@ class MOSSEMultiChannel:
         d_h, d_w, d_channels = d_image.shape
 
         d_image = cv2.resize(d_image, (i_h, i_w), interpolation=cv2.INTER_AREA)
-        self.mosse_trackers_ = []
 
         for channel in range(d_channels):
-            self.mosse_trackers_.append(MOSSETrackerGrayscale(std=self.std, learning_rate=self.learning_rate))
-            self.mosse_trackers_[-1].start(d_image[:,:,channel], region) 
+            self.mosse_trackers.append(MOSSETrackerGrayscale(std=self.std, learning_rate=self.learning_rate))
+            self.mosse_trackers[-1].start(d_image[:,:,channel], region) 
 
         xy = np.mgrid[0:self.region.height, 0:self.region.width].reshape(2,-1).T
         gaussian = multivariate_normal(mean=np.array(self.region_center), cov=np.eye(2)*self.std**2).pdf(xy)
@@ -70,7 +71,8 @@ class MOSSEMultiChannel:
         i_h, i_w, _ = image.shape
         d_image = self.descriptor(image)
         d_image = cv2.resize(d_image, (i_h, i_w), interpolation=cv2.INTER_AREA)
-        responses = [tracker.compute_response(d_image[:,:,i]).last_response for i, tracker in enumerate(self._mosse_trackers)]
+
+        responses = [tracker.compute_response(d_image[:,:,i]).last_response for i, tracker in enumerate(self.mosse_trackers)]
         accum_response = np.sum(responses, axis=0)
         self.last_response = accum_response
 
@@ -83,7 +85,7 @@ class MOSSEMultiChannel:
             self.region.ypos += r_offset
             self.region.xpos += c_offset
 
-            for tracker in self._mosse_trackers:
+            for tracker in self.mosse_trackers:
                 tracker.region.ypos += r_offset
                 tracker.region.xpos += c_offset
             
@@ -93,7 +95,7 @@ class MOSSEMultiChannel:
         """
         Re-fit model M using new object position found in self.region (from detection step)
         """
-        for tracker in self._mosse_trackers:
+        for tracker in self.mosse_trackers:
             tracker.update(image)
             
     def get_filter(self, image):
@@ -103,7 +105,7 @@ class MOSSEMultiChannel:
         patch = crop_patch(image, region)
         window = patch
         
-        filters = [np.abs(ifft2(tracker.M)) for tracker in self._mosse_trackers]
+        filters = [np.abs(ifft2(tracker.M)) for tracker in self.mosse_trackers]
         filt = np.sum(filters, axis=0)
 
         response = np.abs(self.last_response)
