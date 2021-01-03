@@ -39,6 +39,8 @@ class MOSSEMultiChannel:
         self.region = None
         self.region_center = None
         self.mosse_trackers = []
+        self.A = None
+        self.B = None
 
 
     def start(self, image, region):
@@ -59,6 +61,11 @@ class MOSSEMultiChannel:
             self.mosse_trackers.append(MOSSETrackerGrayscale(std=self.std, learning_rate=self.learning_rate))
             self.mosse_trackers[-1].start(d_image[:,:,channel], region) 
 
+        self.A = np.mean([tracker.A for tracker in self.mosse_trackers], axis=0)
+        self.B = np.mean([tracker.B for tracker in self.mosse_trackers], axis=0)
+
+        self.M = self.A / self.B
+
         xy = np.mgrid[0:self.region.height, 0:self.region.width].reshape(2,-1).T
         gaussian = multivariate_normal(mean=np.array(self.region_center), cov=np.eye(2)*self.std**2).pdf(xy)
         gaussian = np.array(gaussian).reshape(self.region.height, self.region.width)
@@ -66,17 +73,17 @@ class MOSSEMultiChannel:
 
     def detect(self, image):
         """
-        Find the object's new position in image, using current model M
+            Find the object's new position in image, using current model M
         """
         i_h, i_w, _ = image.shape
         d_image = self.descriptor(image)
         d_image = cv2.resize(d_image, (i_h, i_w), interpolation=cv2.INTER_AREA)
 
         responses = [tracker.compute_response(d_image[:,:,i]).last_response for i, tracker in enumerate(self.mosse_trackers)]
-        accum_response = np.sum(responses, axis=0)
+        accum_response = np.mean(responses, axis=0) #Aggregating the responses of all trackers. Not sure if this is the optimal way
         self.last_response = accum_response
 
-        r, c = np.unravel_index(np.argmax(accum_response), accum_response.shape) # Try taking the expected position as well
+        r, c = np.unravel_index(np.argmax(accum_response), accum_response.shape) #
 
         r_offset = np.mod(r + self.region_center[0], self.region.height) - self.region_center[0]
         c_offset = np.mod(c + self.region_center[1], self.region.width) - self.region_center[1]
@@ -95,18 +102,45 @@ class MOSSEMultiChannel:
         """
         Re-fit model M using new object position found in self.region (from detection step)
         """
-        for tracker in self.mosse_trackers:
-            tracker.update(image)
+        i_h, i_w, _ = image.shape
+        d_image = self.descriptor(image)
+        d_image = cv2.resize(d_image, (i_h, i_w), interpolation=cv2.INTER_AREA)
+
+        for i, tracker in enumerate(self.mosse_trackers):
+            tracker.update(d_image[:,:,i])
+
+        self.A = np.mean([tracker.A for tracker in self.mosse_trackers], axis=0)
+        self.B = np.mean([tracker.B for tracker in self.mosse_trackers], axis=0)
+
+        self.M = self.A / self.B
             
-    def get_filter(self, image):
+    def get_filter(self, image, channel=None):
         region = self.region
         
-        if len(image.shape)==3 : image = np.sum(image, axis=2) / 3
-        patch = crop_patch(image, region)
-        window = patch
-        
-        filters = [np.abs(ifft2(tracker.M)) for tracker in self.mosse_trackers]
-        filt = np.sum(filters, axis=0)
+        if channel is None:
+            if len(image.shape)==3 : image = np.sum(image, axis=2) / 3
+            patch = crop_patch(image, region)
+            window = patch
 
-        response = np.abs(self.last_response)
-        return window, filt, response
+            filt = np.abs(ifft2(self.M))
+
+            response = np.abs(self.last_response)
+            return window, filt, response
+
+        else:
+            i_h, i_w, _ = image.shape
+            d_image = self.descriptor(image)
+            d_image = cv2.resize(d_image, (i_h, i_w), interpolation=cv2.INTER_AREA)
+            patch = crop_patch(d_image[:,:,channel], region)
+            window = patch
+
+            filt = np.abs(ifft2(self.mosse_trackers[channel].M))
+            try:
+                response = np.abs(self.mosse_trackers[channel].last_response)
+            except:
+                xy = np.mgrid[0:self.region.height, 0:self.region.width].reshape(2,-1).T
+                gaussian = multivariate_normal(mean=np.array(self.region_center), cov=np.eye(2)*self.std**2).pdf(xy)
+                gaussian = np.array(gaussian).reshape(self.region.height, self.region.width)
+                response = gaussian
+
+            return window, filt, response

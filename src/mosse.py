@@ -128,7 +128,7 @@ class MOSSETrackerGrayscale:
         Re-fit model M using new object position found in self.region (from detection step)
         """
         # Convert to grayscale
-        image = np.sum(image, 2) / 3
+        if len(image.shape)==3: image = np.sum(image, 2) / 3
         patch = crop_patch(image, self.region)
         normalized_patch = MOSSETrackerGrayscale.normalize(patch)
 
