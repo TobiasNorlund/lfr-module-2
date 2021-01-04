@@ -39,7 +39,8 @@ class MOSSETrackerGrayscale:
 
     @staticmethod
     def normalize(patch):
-        patch = np.log(1+patch)
+        patch = patch + np.ones(patch.shape)
+        patch = np.log(patch)
         patch = patch - np.mean(patch)
         patch = patch / np.std(patch)
         window = window_func_2d(patch.shape[0], patch.shape[1])
@@ -66,7 +67,7 @@ class MOSSETrackerGrayscale:
         Construct initial model (=filter) in fourier domain using provided region in image
         """
         # Convert to grayscale
-        image = np.sum(image, 2) / 3
+        if len(image.shape)==3: image = np.sum(image, 2) / 3
 
         # Where the gaussian should be centered
         self.region = region
@@ -87,17 +88,12 @@ class MOSSETrackerGrayscale:
         Find the object's new position in image, using current model M
         """
         # Convert to grayscale
-        image = np.sum(image, 2) / 3
+        if len(image.shape)==3: image = np.sum(image, 2) / 3
 
-        patch = crop_patch(image, self.region)
-
-        P = fft2(MOSSETrackerGrayscale.normalize(patch))
-        response = ifft2( np.conjugate(self.M) * P )
-
-        r, c = np.unravel_index(np.argmax(response), response.shape)
+        self.compute_response(image)
+        r, c = np.unravel_index(np.argmax(self.last_response), self.last_response.shape)
 
         # Keep for visualisation
-        self.last_response = response
 
         r_offset = np.mod(r + self.region_center[0], self.region.height) - self.region_center[0]
         c_offset = np.mod(c + self.region_center[1], self.region.width) - self.region_center[1]
@@ -112,12 +108,27 @@ class MOSSETrackerGrayscale:
 
         return self.region
 
+    def compute_response(self, image):
+        """
+            Update docstring
+        """
+        patch = crop_patch(image, self.region)
+
+        P = fft2(MOSSETrackerGrayscale.normalize(patch))
+        response = ifft2( np.conjugate(self.M) * P )
+
+        r, c = np.unravel_index(np.argmax(response), response.shape)
+
+        # Keep for visualisation
+        self.last_response = response
+        return self
+
     def update(self, image):
         """
         Re-fit model M using new object position found in self.region (from detection step)
         """
         # Convert to grayscale
-        image = np.sum(image, 2) / 3
+        if len(image.shape)==3: image = np.sum(image, 2) / 3
         patch = crop_patch(image, self.region)
         normalized_patch = MOSSETrackerGrayscale.normalize(patch)
 
@@ -131,3 +142,16 @@ class MOSSETrackerGrayscale:
 
         return normalized_patch
 
+    def get_filter(self, image):
+        region = self.region
+ 
+        if len(image.shape)==3 : image = np.sum(image, axis=2) / 3
+
+        patch = crop_patch(image, region)
+        window = patch
+        filt = np.abs(ifft2(self.M))
+        try:
+            response = np.abs(self.last_response)
+        except:
+            response = np.zeros(filt.shape)
+        return window, filt, response
