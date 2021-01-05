@@ -6,6 +6,7 @@ def add_tracker_args(argument_parser):
     argument_parser.add_argument("--tracker", choices=("NCC", "MOSSE", "MCM"), required=True)
     ncc.add_cli_arguments(argument_parser)
     mosse.add_cli_arguments(argument_parser)
+    multi_channel_mosse.add_cli_arguments(argument_parser)
 
 
 def get_tracker(args):

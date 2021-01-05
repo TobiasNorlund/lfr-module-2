@@ -39,8 +39,8 @@ class MOSSETrackerGrayscale:
 
     @staticmethod
     def normalize(patch):
-        patch = patch + np.ones(patch.shape)
-        patch = np.log(patch)
+        #patch = patch + np.ones(patch.shape)
+        patch = np.log(patch+1)
         patch = patch - np.mean(patch)
         patch = patch / np.std(patch)
         window = window_func_2d(patch.shape[0], patch.shape[1])
@@ -108,7 +108,7 @@ class MOSSETrackerGrayscale:
 
         return self.region
 
-    def compute_response(self, image):
+    def compute_response(self, image): #Now redunant
         """
             Update docstring
         """
@@ -123,7 +123,7 @@ class MOSSETrackerGrayscale:
         self.last_response = response
         return self
 
-    def update(self, image):
+    def update(self, image, B=None):
         """
         Re-fit model M using new object position found in self.region (from detection step)
         """
@@ -137,7 +137,12 @@ class MOSSETrackerGrayscale:
         P = fft2(normalized_patch)
 
         self.A = self.A * (1-self.learning_rate) + np.conjugate(C) * P * self.learning_rate
-        self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
+
+        if B is None:
+            self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
+        else:
+            self.B = B
+
         self.M = self.A / self.B
 
         return normalized_patch
