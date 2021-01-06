@@ -117,11 +117,8 @@ class MOSSETrackerGrayscale:
         P = fft2(MOSSETrackerGrayscale.normalize(patch))
         response = ifft2( np.conjugate(self.M) * P )
 
-        r, c = np.unravel_index(np.argmax(response), response.shape)
-
         # Keep for visualisation
         self.last_response = response
-        return self
 
     def update(self, image, B=None):
         """
@@ -137,26 +134,6 @@ class MOSSETrackerGrayscale:
         P = fft2(normalized_patch)
 
         self.A = self.A * (1-self.learning_rate) + np.conjugate(C) * P * self.learning_rate
-
-        if B is None:
-            self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
-        else:
-            self.B = B
-
+        self.B = self.B * (1-self.learning_rate) + np.conjugate(P) * P * self.learning_rate
         self.M = self.A / self.B
-
         return normalized_patch
-
-    def get_filter(self, image):
-        region = self.region
- 
-        if len(image.shape)==3 : image = np.sum(image, axis=2) / 3
-
-        patch = crop_patch(image, region)
-        window = patch
-        filt = np.abs(ifft2(self.M))
-        try:
-            response = np.abs(self.last_response)
-        except:
-            response = np.zeros(filt.shape)
-        return window, filt, response
