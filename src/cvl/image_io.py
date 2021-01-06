@@ -41,12 +41,18 @@ def crop_patch(image, region):
         ci1 = image.shape[1]
         cp1 = region.width - (c1 - image.shape[1])
 
-    patch = np.zeros(shape=(region.height, region.width),
+    try:
+        patch = np.zeros(shape=(region.height, region.width),
                      dtype=image.dtype)
+        patch[rp0:rp1, cp0:cp1] = image[ri0:ri1, ci0:ci1]
+        assert patch.shape == (region.height, region.width)
 
-    patch[rp0:rp1, cp0:cp1] = image[ri0:ri1, ci0:ci1]
+    except ValueError:
+        patch = np.zeros(shape=(region.height, region.width, 3),
+                     dtype=image.dtype)
+        patch[rp0:rp1, cp0:cp1] = image[ri0:ri1, ci0:ci1]
+        assert patch.shape == (region.height, region.width, 3)
 
-    assert patch.shape == (region.height, region.width)
     return patch
 
 
